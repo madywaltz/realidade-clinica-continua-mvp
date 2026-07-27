@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Realidade Clínica Contínua · MVP · Samais</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-..." crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#070708',
+            surface: '#0e0e10',
+            elevated: '#161618',
+            gold: {
+              300: '#eac97a',
+              500: '#bf9a3d'
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #070708; color: #f4f4f5; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #eac97a; }
+    .card { background: #0e0e10; border: 1px solid #1f1f22; border-top: 2px solid #bf9a3d; border-radius: 8px; }
+    .btn-gold { background: #bf9a3d; color: #070708; font-weight: 600; }
+    .btn-gold:hover { background: #eac97a; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // ========== DATA: PatientReality for Heloísa (from video) ==========
+    const heloisa = {
+      id: 'cccccccc-0000-0000-0000-000000000038',
+      name: 'Heloísa Marques Pinto',
+      age: 69,
+      sex: 'feminino',
+      cpf: '***.***.900-11',
+      cns: '*** *** *** 0038',
+      status: 'Em atendimento UPA',
+      unit: 'UPA Sabará',
+      chiefComplaint: 'Cefaleia súbita de forte intensidade com vômitos. Suspeita de AVE, déficit motor em MSD.',
+      vitals: { pa: '128/88', fc: 72, fr: 16, temp: 36.5, sat: 98, peso: 78, altura: 178, time: '00:04' },
+      events: [
+        { type: 'atendimento', title: 'Pronto atendimento (UPA)', date: '27/07/2026', location: 'UPA Sabará', status: 'Em andamento' },
+        { type: 'exame', title: 'Glicemia de jejum', date: '28/02/2025', detail: '88 mg/dL' },
+        { type: 'exame', title: 'Colesterol total e frações', date: '03/06/2025', detail: 'LDL 152 mg/dL' },
+        { type: 'vacina', title: 'Hepatite B · 3ª dose', date: '21/10/2024' },
+        { type: 'vacina', title: 'Febre amarela', date: '25/03/2024' },
+        { type: 'vacina', title: 'Tríplice viral (SCR)', date: '28/08/2023' },
+        { type: 'vacina', title: 'Dupla adulto (dT)', date: '19/05/2025' },
+      ],
+      gaps: ['Vacinas atrasadas no calendário', 'Avaliação de deglutição não formalizada', 'Risco de queda não registrado']
+    };
+
+    // ========== ANTICIPATION BY ROLE ==========
+    const anticipations = {
+      medico: [
+        { id: 'm1', priority: 'high', text: 'Você costuma olhar sinais vitais + SOAP da enfermagem primeiro neste perfil neurológico.', reason: 'Padrão aprendido' },
+        { id: 'm2', priority: 'high', text: 'Hipóteses de alta relevância ainda não formalizadas: AVE isquêmico vs enxaqueca complicada.', reason: 'Estado clínico atual' },
+        { id: 'm3', priority: 'medium', text: 'Última glicemia de jejum (88 mg/dL) no limite — considerar no contexto neurológico.', reason: 'Histórico longitudinal' },
+        { id: 'm4', priority: 'medium', text: 'LDL 152 em junho/2025 — risco vascular presente.', reason: 'Fator de risco' },
+      ],
+      enfermeiro: [
+        { id: 'e1', priority: 'high', text: 'Reavaliar sinais vitais em 20–30 min (padrão em casos neurológicos).', reason: 'Protocolo + seu padrão' },
+        { id: 'e2', priority: 'high', text: 'Déficit motor MSD relatado — verificar evolução e posicionamento.', reason: 'Queixa principal' },
+        { id: 'e3', priority: 'medium', text: 'Avaliação de deglutição e risco de queda ainda não formalizadas.', reason: 'Lacuna detectada' },
+        { id: 'e4', priority: 'low', text: 'Triagem já realizada. Aguardar decisão médica para reclassificação.', reason: 'Fluxo atual' },
+      ],
+      gestor: [
+        { id: 'g1', priority: 'high', text: 'Possível necessidade de transferência / imagem / especialidade. Impacto na fila e leitos.', reason: 'Logística' },
+        { id: 'g2', priority: 'high', text: 'Tempo de permanência em andamento · Risco de ocupação de leito.', reason: 'Pressão sistêmica' },
+        { id: 'g3', priority: 'medium', text: 'Vacinas em atraso detectadas — oportunidade de cuidado longitudinal.', reason: 'Continuidade' },
+        { id: 'g4', priority: 'low', text: 'Última consulta APS registrada. Verificar continuidade após alta.', reason: 'Rede' },
+      ]
+    };
+
+    function App() {
+      const [role, setRole] = useState('medico');
+      const [interactions, setInteractions] = useState(0);
+      const [learned, setLearned] = useState(false);
+
+      const currentAnticipation = useMemo(() => {
+        let items = anticipations[role] || [];
+        if (learned && role === 'medico') {
+          items = [
+            { id: 'l1', priority: 'high', text: 'Com base nas suas interações anteriores, priorizei glicemia + LDL + sinais vitais.', reason: 'Aprendizado deste profissional' },
+            ...items.slice(1)
+          ];
+        }
+        return items;
+      }, [role, learned]);
+
+      const handleInteraction = () => {
+        setInteractions(i => i + 1);
+        if (interactions >= 2) setLearned(true);
+      };
+
+      const roleLabel = { medico: 'Médico', enfermeiro: 'Enfermeiro', gestor: 'Gestor / Regulação' };
+
+      return (
+        <div className="min-h-screen bg-canvas text-zinc-100">
+          {/* Header */}
+          <header className="border-b border-zinc-800 bg-surface/80 backdrop-blur sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="eyebrow mb-1">SAMAIS · REALIDADE CLÍNICA CONTÍNUA</div>
+                <h1 className="text-xl font-semibold tracking-tight">MVP · Camada Viva do Paciente</h1>
+              </div>
+              <div className="flex gap-2">
+                {['medico', 'enfermeiro', 'gestor'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setRole(r)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                      role === r ? 'bg-gold-500 text-black' : 'bg-elevated text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {roleLabel[r]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-6">
+            {/* Left: Patient continuous state */}
+            <section className="col-span-12 lg:col-span-4 space-y-4">
+              <div className="card p-5">
+                <div className="eyebrow mb-2">Estado atual · independente de login</div>
+                <h2 className="text-2xl font-semibold">{heloisa.name}</h2>
+                <p className="text-zinc-400 text-sm mt-1">{heloisa.age} anos · {heloisa.sex} · {heloisa.cpf}</p>
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    {heloisa.status}
+                  </span>
+                  <span className="text-zinc-500 text-sm">{heloisa.unit}</span>
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-zinc-300">{heloisa.chiefComplaint}</p>
+              </div>
+
+              <div className="card p-5">
+                <div className="eyebrow mb-3">Sinais vitais · {heloisa.vitals.time}</div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><span className="text-zinc-500">PA</span><div className="font-mono text-lg">{heloisa.vitals.pa}</div></div>
+                  <div><span className="text-zinc-500">FC</span><div className="font-mono text-lg">{heloisa.vitals.fc} bpm</div></div>
+                  <div><span className="text-zinc-500">Sat</span><div className="font-mono text-lg">{heloisa.vitals.sat}%</div></div>
+                  <div><span className="text-zinc-500">Temp</span><div className="font-mono text-lg">{heloisa.vitals.temp}°C</div></div>
+                </div>
+              </div>
+
+              <div className="card p-5">
+                <div className="eyebrow mb-3">Lacunas detectadas</div>
+                <ul className="space-y-2 text-sm text-zinc-300">
+                  {heloisa.gaps.map((g, i) => (
+                    <li key={i} className="flex gap-2"><span className="text-gold-500">•</span>{g}</li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            {/* Center: Anticipation Surface */}
+            <section className="col-span-12 lg:col-span-5 space-y-4">
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="eyebrow">Superfície de Antecipação</div>
+                    <h3 className="text-lg font-medium mt-1">O que você precisa ver agora · {roleLabel[role]}</h3>
+                  </div>
+                  {learned && <span className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300">Aprendizado ativo</span>}
+                </div>
+
+                <div className="space-y-3">
+                  {currentAnticipation.map(item => (
+                    <div
+                      key={item.id}
+                      onClick={handleInteraction}
+                      className={`p-4 rounded-lg border cursor-pointer transition hover:border-gold-500/50 ${
+                        item.priority === 'high' ? 'bg-gold-500/5 border-gold-500/30' : 'bg-elevated border-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm leading-relaxed">{item.text}</p>
+                        <span className={`text-[10px] uppercase tracking-wider shrink-0 ${
+                          item.priority === 'high' ? 'text-gold-300' : 'text-zinc-500'
+                        }`}>{item.priority}</span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-2">{item.reason}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleInteraction}
+                  className="mt-5 w-full btn-gold py-3 rounded-md text-sm"
+                >
+                  {role === 'medico' ? 'Continuar raciocínio clínico a partir da triagem' :
+                   role === 'enfermeiro' ? 'Reavaliar e evoluir triagem' :
+                   'Ver impacto sistêmico e próximos fluxos'}
+                </button>
+              </div>
+
+              <div className="text-xs text-zinc-500 text-center">
+                Interações registradas: {interactions} · O sistema começa a adaptar após 3 cliques
+              </div>
+            </section>
+
+            {/* Right: Timeline */}
+            <section className="col-span-12 lg:col-span-3 space-y-4">
+              <div className="card p-5">
+                <div className="eyebrow mb-3">Linha do tempo · contexto</div>
+                <div className="space-y-3">
+                  {heloisa.events.map(ev => (
+                    <div key={ev.title + ev.date} className="text-sm border-l-2 border-zinc-700 pl-3">
+                      <div className="font-medium text-zinc-200">{ev.title}</div>
+                      <div className="text-xs text-zinc-500">{ev.date}{ev.detail ? ` · ${ev.detail}` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card p-4 text-xs text-zinc-400 leading-relaxed">
+                <strong className="text-gold-300">Como funciona este MVP</strong><br/>
+                O mesmo modelo vivo do paciente é projetado de forma diferente para cada papel. A superfície de antecipação muda radicalmente. Clique nas sugestões para simular o aprendizado do sistema sobre o seu padrão cognitivo.
+              </div>
+            </section>
+          </main>
+
+          <footer className="border-t border-zinc-800 mt-12 py-6 text-center text-xs text-zinc-500">
+            Realidade Clínica Contínua · MVP v0.1 · Construído para Walter Elias Filho / Mady Waltz · Samais
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
